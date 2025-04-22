@@ -9,19 +9,23 @@ from sklearn.preprocessing import LabelEncoder
 # Set page configuration
 st.set_page_config(page_title="Autism Prediction", layout="wide")
 
-# Load the trained model
+# Load the trained model and encoders
 @st.cache_resource
-def load_model():
+def load_files():
     with open('best_model.pkl', 'rb') as file:
         model = pickle.load(file)
-    return model
+    with open('encoders.pkl', 'rb') as file:
+        encoders = pickle.load(file)
+    return model, encoders
 
-# Try to load the model
+# Try to load the model and encoders
 try:
-    model = load_model()
-except:
-    st.error("Failed to load model. Make sure 'best_model.pkl' exists in the repository.")
-    model = None
+    model, encoders = load_files()
+    st.sidebar.success("Model and encoders loaded successfully!")
+except Exception as e:
+    st.error(f"Failed to load model or encoders: {e}")
+    st.error("Make sure 'best_model.pkl' and 'encoders.pkl' exist in the repository.")
+    model, encoders = None, None
 
 # App title and description
 st.title("Autism Spectrum Disorder Prediction")
@@ -36,20 +40,18 @@ st.header("Patient Information")
 col1, col2 = st.columns(2)
 
 with col1:
-    # Add your input fields here based on the features in your model
     age = st.number_input("Age", min_value=1, max_value=100, value=28)
     gender = st.selectbox("Gender", ["Male", "Female"])
     jaundice = st.selectbox("Born with jaundice?", ["No", "Yes"])
     autism = st.selectbox("Family member with autism?", ["No", "Yes"])
 
 with col2:
-    # Add more input fields
     used_app = st.selectbox("Used autism screening app before?", ["No", "Yes"])
     result = st.number_input("Screening score", min_value=0, max_value=10, value=5)
-    ethnicity = st.selectbox("Ethnicity", ["White European", "Hispanic", "Black", "Asian", "Middle Eastern", "Others"])
-    country = st.selectbox("Country of residence", ["United States", "United Kingdom", "India", "Australia", "Other"])
+    ethnicity = st.selectbox("Ethnicity", ["White European", "Hispanic", "Black", "Asian", "Middle Eastern", "Others", "South Asian", "Turkish", "Others"])
+    country = st.selectbox("Country of residence", ["United States", "United Kingdom", "India", "Australia", "New Zealand", "Others"])
 
-# Add the A1-A10 questions (assuming these are the behavioral markers from your model)
+# Add the A1-A10 questions (behavioral markers)
 st.header("Behavioral Markers")
 
 col1, col2 = st.columns(2)
@@ -82,8 +84,8 @@ with col2:
 
 # Prediction button
 if st.button("Predict"):
-    if model is not None:
-        # Prepare input data (adjust according to your model's features)
+    if model is not None and encoders is not None:
+        # Prepare input data
         input_data = {
             'A1_Score': responses['A1'],
             'A2_Score': responses['A2'],
@@ -96,16 +98,28 @@ if st.button("Predict"):
             'A9_Score': responses['A9'],
             'A10_Score': responses['A10'],
             'age': age,
-            'gender': 1 if gender == "Male" else 0,
-            'jaundice': 1 if jaundice == "Yes" else 0,
-            'autism': 1 if autism == "Yes" else 0,
-            'used_app_before': 1 if used_app == "Yes" else 0,
+            'gender': gender,
+            'jaundice': jaundice,
+            'autism': autism,
+            'used_app_before': used_app,
             'result': result,
-            # You may need to encode ethnicity and country if your model expects that
+            'ethnicity': ethnicity,
+            'country_of_res': country
         }
         
         # Convert to DataFrame
         input_df = pd.DataFrame([input_data])
+        
+        # Apply the same encoders used during training
+        for column in input_df.select_dtypes(include=['object']).columns:
+            if column in encoders:
+                try:
+                    # Transform using the saved encoder
+                    input_df[column] = encoders[column].transform([input_df[column].iloc[0]])[0]
+                except ValueError:
+                    # Handle unseen categories
+                    st.warning(f"Warning: Unseen value in {column}. Using default encoding.")
+                    input_df[column] = 0  # Assign a default value
         
         # Make prediction
         prediction = model.predict(input_df)
@@ -121,11 +135,13 @@ if st.button("Predict"):
             
         st.write(f"Probability of ASD: {pred_probability[0][1]:.2%}")
         
-        # Optional: Add a visualization
+        # Add a visualization
         st.subheader("Prediction Probability")
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(8, 4))
         labels = ['No ASD', 'ASD']
-        ax.bar(labels, [pred_probability[0][0], pred_probability[0][1]])
+        ax.bar(labels, [pred_probability[0][0], pred_probability[0][1]], color=['green', 'red'])
         ax.set_ylabel('Probability')
         ax.set_ylim(0, 1)
+        for i, v in enumerate([pred_probability[0][0], pred_probability[0][1]]):
+            ax.text(i, v + 0.02, f"{v:.2%}", ha='center')
         st.pyplot(fig)
