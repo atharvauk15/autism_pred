@@ -43,12 +43,12 @@ with col1:
     age = st.number_input("Age", min_value=1, max_value=100, value=28)
     gender = st.selectbox("Gender", ["Male", "Female"])
     jaundice = st.selectbox("Born with jaundice?", ["No", "Yes"])
-    autism = st.selectbox("Family member with autism?", ["No", "Yes"])
+    autism_family = st.selectbox("Family member with autism?", ["No", "Yes"])
+    relation = st.selectbox("Who is completing the test", ["Self", "Parent", "Caregiver", "Medical staff", "Other"])
 
 with col2:
     used_app = st.selectbox("Used autism screening app before?", ["No", "Yes"])
-    result = st.number_input("Screening score", min_value=0, max_value=10, value=5)
-    ethnicity = st.selectbox("Ethnicity", ["White European", "Hispanic", "Black", "Asian", "Middle Eastern", "Others", "South Asian", "Turkish", "Others"])
+    ethnicity = st.selectbox("Ethnicity", ["White European", "Hispanic", "Black", "Asian", "Middle Eastern", "South Asian", "Turkish", "Others"])
     country = st.selectbox("Country of residence", ["United States", "United Kingdom", "India", "Australia", "New Zealand", "Others"])
 
 # Add the A1-A10 questions (behavioral markers)
@@ -82,10 +82,14 @@ with col2:
     for i in range(5, 10):
         responses[f'A{i+1}'] = 1 if st.selectbox(questions[i], ["No", "Yes"]) == "Yes" else 0
 
+# Calculate screening score automatically
+result = sum(responses.values())
+st.info(f"Calculated screening score: {result}/10")
+
 # Prediction button
 if st.button("Predict"):
     if model is not None and encoders is not None:
-        # Prepare input data
+        # Prepare input data - using EXACT column names from training
         input_data = {
             'A1_Score': responses['A1'],
             'A2_Score': responses['A2'],
@@ -100,13 +104,14 @@ if st.button("Predict"):
             'age': age,
             'gender': gender,
             'jaundice': jaundice,
-            'autism': autism,
+            'autism': autism_family,  # Using 'autism' to match training data
             'used_app_before': used_app,
             'result': result,
             'ethnicity': ethnicity,
-            'country_of_res': country
+            'country_of_res': country,  # Using 'country_of_res' to match training data
+            'relation': relation
         }
-        
+    
         # Convert to DataFrame
         input_df = pd.DataFrame([input_data])
         
